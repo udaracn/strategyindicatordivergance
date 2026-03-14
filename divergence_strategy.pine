@@ -64,4 +64,4 @@ if hidBear
 if regBull or hidBull
     strategy.entry("Long", strategy.long)
 if regBear or hidBear
-    strategy.close("Long")
+    strategy.entry("Short", strategy.short)
