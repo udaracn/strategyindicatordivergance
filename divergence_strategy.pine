@@ -6,6 +6,7 @@ rsiLength = input.int(14, "RSI Length", minval=1)
 rsiSource = input.source(close, "RSI Source")
 lbL = input.int(5, "Pivot Lookback Left")
 lbR = input.int(5, "Pivot Lookback Right")
+useCRT = input.bool(true, "Use CRT Confluence")
 
 // RSI calculation
 rsiValue = ta.rsi(rsiSource, rsiLength)
@@ -60,8 +61,23 @@ if hidBull
 if hidBear
     label.new(bar_index[lbR], high[lbR], "Hid Bear", color=color.maroon, style=label.style_label_down, textcolor=color.white)
 
+// Candle Range Theory (CRT) Logic
+crtBull = low < low[1] and close > low[1]
+crtBear = high > high[1] and close < high[1]
+
+// Visualization of CRT
+plotshape(crtBull, "CRT Bull", shape.triangleup, location.belowbar, color.lime, size=size.tiny)
+plotshape(crtBear, "CRT Bear", shape.triangledown, location.abovebar, color.maroon, size=size.tiny)
+
 // Strategy execution
-if regBull or hidBull
+longCondition = regBull or hidBull
+shortCondition = regBear or hidBear
+
+if useCRT
+    longCondition := longCondition and crtBull
+    shortCondition := shortCondition and crtBear
+
+if longCondition
     strategy.entry("Long", strategy.long)
-if regBear or hidBear
+if shortCondition
     strategy.entry("Short", strategy.short)
