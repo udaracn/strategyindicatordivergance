@@ -1,0 +1,104 @@
+//@version=5
+strategy("Divergence Strategy", overlay=true, initial_capital=10000, default_qty_type=strategy.percent_of_equity, default_qty_value=10)
+
+// Inputs
+rsiLength = input.int(14, "RSI Length", minval=1)
+rsiSource = input.source(close, "RSI Source")
+lbL = input.int(5, "Pivot Lookback Left")
+lbR = input.int(5, "Pivot Lookback Right")
+useCRT = input.bool(true, "Use CRT Confluence")
+tpPerc = input.float(2.0, "Take Profit %", minval=0.1) / 100
+slPerc = input.float(1.0, "Stop Loss %", minval=0.1) / 100
+
+// RSI calculation
+rsiValue = ta.rsi(rsiSource, rsiLength)
+
+// Pivot detection
+ph = ta.pivothigh(rsiValue, lbL, lbR)
+pl = ta.pivotlow(rsiValue, lbL, lbR)
+
+// Store pivot values and bar indices
+var float lastPHValue = na
+var int lastPHBar = na
+var float prevPHValue = na
+var int prevPHBar = na
+
+var float lastPLValue = na
+var int lastPLBar = na
+var float prevPLValue = na
+var int prevPLBar = na
+
+if not na(ph)
+    prevPHValue := lastPHValue
+    prevPHBar := lastPHBar
+    lastPHValue := ph
+    lastPHBar := bar_index[lbR]
+
+if not na(pl)
+    prevPLValue := lastPLValue
+    prevPLBar := lastPLBar
+    lastPLValue := pl
+    lastPLBar := bar_index[lbR]
+
+// Divergence Logic
+// Regular Bullish: Price Lower Low (LL) and RSI Higher Low (HL)
+regBull = not na(pl) and low[lbR] < low[bar_index - prevPLBar] and lastPLValue > prevPLValue
+
+// Regular Bearish: Price Higher High (HH) and RSI Lower High (LH)
+regBear = not na(ph) and high[lbR] > high[bar_index - prevPHBar] and lastPHValue < prevPHValue
+
+// Hidden Bullish: Price Higher Low (HL) and RSI Lower Low (LL)
+hidBull = not na(pl) and low[lbR] > low[bar_index - prevPLBar] and lastPLValue < prevPLValue
+
+// Hidden Bearish: Price Lower High (LH) and RSI Higher High (HH)
+hidBear = not na(ph) and high[lbR] < high[bar_index - prevPHBar] and lastPHValue > prevPHValue
+
+// Visualization
+if regBull
+    label.new(bar_index[lbR], low[lbR], "Reg Bull", color=color.green, style=label.style_label_up, textcolor=color.white)
+if regBear
+    label.new(bar_index[lbR], high[lbR], "Reg Bear", color=color.red, style=label.style_label_down, textcolor=color.white)
+if hidBull
+    label.new(bar_index[lbR], low[lbR], "Hid Bull", color=color.lime, style=label.style_label_up, textcolor=color.black)
+if hidBear
+    label.new(bar_index[lbR], high[lbR], "Hid Bear", color=color.maroon, style=label.style_label_down, textcolor=color.white)
+
+// Candle Range Theory (CRT) Logic
+crtBull = low < low[1] and close > low[1]
+crtBear = high > high[1] and close < high[1]
+
+// Visualization of CRT
+plotshape(crtBull, "CRT Bull", shape.triangleup, location.belowbar, color.lime, size=size.tiny)
+plotshape(crtBear, "CRT Bear", shape.triangledown, location.abovebar, color.maroon, size=size.tiny)
+
+// Strategy execution
+longCondition = regBull or hidBull
+shortCondition = regBear or hidBear
+
+if useCRT
+    longCondition := longCondition and crtBull
+    shortCondition := shortCondition and crtBear
+
+// Price Calculation and Strategy Exit
+var float entryPrice = na
+var float tpPrice = na
+var float slPrice = na
+
+if longCondition
+    entryPrice := close
+    tpPrice := entryPrice * (1 + tpPerc)
+    slPrice := entryPrice * (1 - slPerc)
+    strategy.entry("Long", strategy.long)
+    label.new(bar_index, high, "Entry: " + str.tostring(entryPrice, "#.##") + "\nTP: " + str.tostring(tpPrice, "#.##") + "\nSL: " + str.tostring(slPrice, "#.##"), color=color.blue, textcolor=color.white, style=label.style_label_down)
+
+if shortCondition
+    entryPrice := close
+    tpPrice := entryPrice * (1 - tpPerc)
+    slPrice := entryPrice * (1 + slPerc)
+    strategy.entry("Short", strategy.short)
+    label.new(bar_index, low, "Entry: " + str.tostring(entryPrice, "#.##") + "\nTP: " + str.tostring(tpPrice, "#.##") + "\nSL: " + str.tostring(slPrice, "#.##"), color=color.orange, textcolor=color.white, style=label.style_label_up)
+
+if strategy.position_size > 0
+    strategy.exit("Exit Long", "Long", limit=tpPrice, stop=slPrice)
+if strategy.position_size < 0
+    strategy.exit("Exit Short", "Short", limit=tpPrice, stop=slPrice)
